@@ -8,7 +8,6 @@
 - `srtf_priority.c` - SRTF, non-preemptive Priority, and preemptive Priority.
 - `round_robin.c` - Round Robin with a configurable quantum.
 - `gantt.c` - prints Gantt charts and CPU idle intervals.
-- `metrics.c` - calculates turnaround time and waiting time from completion times; response time is recorded by each scheduling algorithm.
 
 Priority convention: a smaller priority number means a higher priority.
 
@@ -17,7 +16,7 @@ Priority convention: a smaller priority number means a higher priority.
 Run these commands from this folder:
 
 ```bash
-gcc -Wall -Wextra -std=c11 -o scheduler main.c fcfs_sjf.c srtf_priority.c round_robin.c gantt.c metrics.c
+gcc -Wall -Wextra -std=c11 -o scheduler main.c fcfs_sjf.c srtf_priority.c round_robin.c gantt.c
 ./scheduler
 ```
 
