@@ -126,6 +126,39 @@ int main(void)
         printf("\n========== GANTT CHART ==========\n");
         gantt_display(&g);
 
+        {
+            int busy_time = 0;
+            int idle_time = 0;
+            int total_time = 0;
+
+            for (i = 0; i < g.count; i++) {
+                int duration = g.segments[i].end -
+                               g.segments[i].start;
+
+                if (g.segments[i].pid == -1)
+                    idle_time += duration;
+                else
+                    busy_time += duration;
+            }
+
+            if (g.count > 0) {
+                total_time = g.segments[g.count - 1].end -
+                             g.segments[0].start;
+            }
+
+            printf("\n========== CPU STATISTICS ==========\n");
+            printf("CPU Busy Time: %d\n", busy_time);
+            printf("CPU Idle Time: %d\n", idle_time);
+
+            if (total_time > 0) {
+                printf("CPU Utilization: %.2f%%\n",
+                       (busy_time * 100.0) / total_time);
+            } else {
+                printf("CPU Utilization: 0.00%%\n");
+            }
+        }
+
+
 
         printf("\n========== PROCESS METRICS ==========\n");
         printf("%-8s %-8s %-8s %-8s %-8s\n",
