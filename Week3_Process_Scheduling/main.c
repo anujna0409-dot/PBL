@@ -126,7 +126,6 @@ int main(void)
         printf("\n========== GANTT CHART ==========\n");
         gantt_display(&g);
 
-        calculate_metrics(p, n);
 
         printf("\n========== PROCESS METRICS ==========\n");
         printf("%-8s %-8s %-8s %-8s %-8s\n",
