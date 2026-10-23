@@ -1,0 +1,27 @@
+/* ===== MEMBER 4: style.css ===== */
+:root{--bg:#f2f4f7;--card:#fff;--ink:#1b2430;--line:#d5dbe3;--accent:#2457c5;--ok:#1f7a4d;--warn:#b7791f;--bad:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:var(--ink);color:#fff}
+h1{font-size:20px;margin:0} h2{font-size:16px;margin:0 0 10px}
+main{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;padding:16px;max-width:1200px;margin:auto}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px}
+.wide{grid-column:1/-1}
+label{display:inline-flex;gap:6px;align-items:center;margin:0 12px 8px 0}
+input{padding:5px 8px;border:1px solid var(--line);border-radius:5px;width:90px}
+#amt{width:150px}
+table{border-collapse:collapse;margin:8px 0}
+caption{text-align:left;font-weight:600;padding:2px 0}
+td,th{border:1px solid var(--line);padding:2px;text-align:center}
+td input{width:46px;text-align:center;border:0}
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+button{padding:8px;border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:6px;cursor:pointer;font:inherit}
+button:hover,button:focus-visible{background:var(--accent);color:#fff;outline:none}
+.badge{padding:4px 14px;border-radius:99px;font-weight:700;color:#fff}
+.badge.safe{background:var(--ok)} .badge.unsafe{background:var(--warn)} .badge.deadlocked{background:var(--bad)}
+.seq{font-weight:600}
+.util{display:flex;gap:10px;align-items:center;margin-top:8px}
+.bar{flex:1;height:14px;background:#e6eaf0;border-radius:7px;overflow:hidden}
+#utilFill{height:100%;width:0;background:var(--accent);transition:width .3s}
+canvas{width:100%;max-width:700px;border:1px solid var(--line);border-radius:6px;background:#fafbfc}
+#log{background:#101820;color:#c8e6c9;padding:10px;border-radius:6px;height:180px;overflow:auto;margin:0;font-size:13px}
