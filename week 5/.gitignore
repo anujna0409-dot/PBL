@@ -1,0 +1,7 @@
+# Compiled program and object files
+page_replacement
+*.o
+
+# Editor and OS files
+.vscode/
+.DS_Store
