@@ -1,6 +1,6 @@
 /* Deadlock Simulation - HTTP server (Leader). No external libraries.
-   Build (from deadlock-sim/):  gcc backend/main.c backend/banker.c backend/detect.c -o server  (Windows MinGW: add -lws2_32)
-   Run   (from deadlock-sim/):  ./server   then open http://localhost:8080          */
+   Build (from project root):  gcc -Wall -Wextra backend/*.c -o server   (Windows MinGW: add -lws2_32)
+   Run   (from project root):  ./server   then open http://localhost:8080 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,22 +67,9 @@ static void status_json(const char *msg) {
     J("],\"deadlocked\":"); jvec(dead, nd);
     J(",\"utilization\":{\"overall\":%.1f,\"perResource\":[", all);
     for (j = 0; j < S.m; j++) J("%s%.1f", j ? "," : "", per[j]);
-    J("]},\"edges\":[");                         /* Resource Allocation Graph */
-    int first = 1;
-    for (i = 0; i < S.n; i++) {
-        if (!S.active[i]) continue;
-        for (j = 0; j < S.m; j++) {
-            if (S.alloc[i][j] > 0) {
-                J("%s{\"from\":\"R%d\",\"to\":\"P%d\",\"type\":\"alloc\",\"count\":%d}", first ? "" : ",", j, i, S.alloc[i][j]);
-                first = 0;
-            }
-            if (S.req[i][j] > 0) {
-                J("%s{\"from\":\"P%d\",\"to\":\"R%d\",\"type\":\"request\",\"count\":%d}", first ? "" : ",", i, j, S.req[i][j]);
-                first = 0;
-            }
-        }
-    }
-    J("]}");
+    J("]},\"edges\":");
+    olen += rag_write_json(&S, out + olen, sizeof out - olen);   /* Resource Allocation Graph (rag.c) */
+    J("}");
 }
 
 static int nextint(const char **s, int *v) {
