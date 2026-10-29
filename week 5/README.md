@@ -1,17 +1,82 @@
 # Page Replacement Algorithms in Operating Systems
 
-A C simulator for FIFO, LRU, and Optimal page replacement.
+A C-based simulator that demonstrates three page replacement algorithms: FIFO (First-In, First-Out), LRU (Least Recently Used), and Optimal.
 
-## Team leader files
+## Project Files
 
-- `main.c`: reads and validates input, displays the menu, calls algorithms, and coordinates comparison.
-- `page_replacement.h`: shared constants, statistics structure, and function declarations.
+- `main.c`: Reads and validates input, displays the menu, and coordinates algorithm execution and comparison.
+- `page_replacement.h`: Contains shared constants, the statistics structure, and function declarations.
+- `fifo.c`: Implements FIFO page replacement.
+- `lru.c`: Implements LRU page replacement.
+- `optimal.c`: Implements Optimal page replacement.
+- `results.c`: Implements result and comparison summaries.
 
-The other team members implement `fifo.c`, `lru.c`, and `optimal.c`.
+## Features
 
-## Shared interface contract
+- Accepts a page-reference string and frame count.
+- Displays step-by-step frame tables for each algorithm.
+- Counts page hits and page faults.
+- Calculates hit and fault ratios.
+- Compares all three algorithms.
+- Identifies the algorithm with the fewest page faults for the given input.
 
-Each algorithm must implement the matching declaration in `page_replacement.h`:
+## Requirements
+
+- GCC compiler
+- Ubuntu/Linux or Windows Subsystem for Linux (WSL)
+
+## Compile
+
+Run the following command from the project root directory:
+
+```bash
+gcc -Wall -Wextra -std=c11 "week 5/main.c" "week 5/fifo.c" "week 5/lru.c" "week 5/optimal.c" "week 5/results.c" -o "week 5/page_replacement"
+```
+
+## Run
+
+```bash
+"./week 5/page_replacement"
+```
+
+## How to Use
+
+1. Enter the page-reference string as integers separated by spaces.
+2. Enter the number of page frames (between 1 and 100).
+3. Select an option from the menu:
+   - `1`: FIFO
+   - `2`: LRU
+   - `3`: Optimal
+   - `4`: Compare all algorithms
+   - `5`: Exit
+
+## Sample Input
+
+Page-reference string:
+
+```text
+7 0 1 2 0 3 0 4 2 3
+```
+
+Number of frames:
+
+```text
+3
+```
+
+For this test input, the expected results are:
+
+| Algorithm | Page Hits | Page Faults |
+|---|---:|---:|
+| FIFO | 1 | 9 |
+| LRU | 2 | 8 |
+| Optimal | 4 | 6 |
+
+Optimal produces the fewest page faults for this example.
+
+## Shared Interface
+
+Each algorithm implements the corresponding function declared in `page_replacement.h`:
 
 ```c
 Stats fifo(const int pages[], int n, int frame_count);
@@ -19,28 +84,8 @@ Stats lru(const int pages[], int n, int frame_count);
 Stats optimal(const int pages[], int n, int frame_count);
 ```
 
-Each function should print its step-by-step frame table and return a `Stats` value:
-- `hits`: number of page hits
-- `faults`: number of page faults
-- `references`: number of page references processed
+Each function returns a `Stats` structure containing the number of hits, faults, and references processed. Every reference is counted as either a hit or a fault.
 
-Each algorithm should count every page reference as either a hit or a fault. Therefore, `hits + faults == references`.
+Therefore:
 
-The `print_algorithm_result()` and `print_summary()` functions are declared for use by the team. They can be implemented by the team leader in a shared utility file, or in `main.c` if the build command is updated accordingly.
-
-## Build after all modules are supplied
-
-```bash
-gcc -Wall -Wextra -std=c11 main.c fifo.c lru.c optimal.c results.c -o page_replacement
-```
-
-This assumes the team creates `results.c` to implement the two result-printing functions. Alternatively, put those functions in one existing source file and adjust the build command.
-
-## Sample input
-
-```text
-7 0 1 2 0 3 0 4 2 3
-3
-```
-
-The reference string is entered first, then the frame count. Select option 4 to compare all algorithms.
+`hits + faults == references`
