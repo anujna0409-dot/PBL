@@ -1,5 +1,5 @@
+#include <stddef.h>
 #include "page_replacement.h"
-
 Stats lru(const int pages[], int n, int frame_count)
 {
 Stats stats = {0, 0, n};
