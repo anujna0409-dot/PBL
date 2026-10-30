@@ -79,11 +79,11 @@ static int read_pages(int pages[], int *page_count)
 
         errno = 0;
         value = strtol(cursor, &end, 10);
-        if (errno == ERANGE || end == cursor || value < INT_MIN ||
-            value > INT_MAX) {
-            fprintf(stderr, "Invalid page reference. Use integer page numbers.\n");
-            return 0;
-        }
+      if (errno == ERANGE || end == cursor || value < 0 ||
+    value > INT_MAX) {
+    fprintf(stderr, "Invalid page reference. Use non-negative integer page numbers.\n");
+    return 0;
+}
         if (*end != '\0' && !isspace((unsigned char)*end)) {
             fprintf(stderr, "Invalid character in page-reference string.\n");
             return 0;
