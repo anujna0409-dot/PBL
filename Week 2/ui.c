@@ -126,6 +126,40 @@ void show_live_state(void)
 
 
 /* =========================================
+   SHOW ALL NON-ZERO MEMORY CELLS
+   Read the Core's shared-memory copy while
+   holding the state semaphore.
+   ========================================= */
+void show_memory_state(void)
+{
+    SharedState copy;
+
+    lock_state();
+    copy = *shared;
+    unlock_state();
+
+    printf("\n");
+    printf("=========== MEMORY (non-zero cells) ===========\n");
+
+    int shown = 0;
+
+    for (int i = 0; i < MEMORY_SIZE; i++)
+    {
+        if (copy.memory[i] != 0)
+        {
+            printf("Memory[%d] = %d\n", i, copy.memory[i]);
+            shown++;
+        }
+    }
+
+    if (shown == 0)
+        printf("All memory cells are zero.\n");
+
+    printf("===============================================\n");
+}
+
+
+/* =========================================
    DISPLAY MENU
    ========================================= */
 
@@ -144,7 +178,7 @@ void display_menu(void)
     printf("LOADM <address>    - Load memory into ACC\n");
     printf("PRINT              - Print ACC\n");
     printf("SHOW CPU           - Show CPU information\n");
-    printf("SHOW MEMORY        - Show memory information\n");
+    printf("SHOW MEMORY        - Show all non-zero memory cells\n");
     printf("SHOW STACK         - Show stack information\n");
     printf("SHOW QUEUE         - Show instruction queue\n");
     printf("STATE              - Live state (shared memory)\n");
@@ -161,7 +195,6 @@ int create_command(char *input, Message *msg)
 {
     char command[20];
     char option[20];
-    int value;
     int address;
 
     memset(msg, 0, sizeof(Message));
@@ -510,11 +543,17 @@ int main(void)
             continue;
 
 
-        /* STATE is handled here: it reads shared memory, no message to Core */
+        /* STATE and SHOW MEMORY read the synchronized shared-memory copy. */
 
         if (strcasecmp(input, "STATE") == 0)
         {
             show_live_state();
+            continue;
+        }
+
+        if (strcasecmp(input, "SHOW MEMORY") == 0)
+        {
+            show_memory_state();
             continue;
         }
 
