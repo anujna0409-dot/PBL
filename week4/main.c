@@ -104,6 +104,20 @@ static void handle(const char *path, const char *body) {
         for (j = 0; j < S.m; j++) ok &= nextint(&q, &r[j]);
         if (!ok) status_json("Bad request format");
         else { request_resources(&S, p, r, msg); status_json(msg); }
+    } else if (!strcmp(path, "/api/release")) {
+        const char *q = body; int p, amount[MAXR] = {0}, ok = nextint(&q, &p);
+        for (j = 0; j < S.m; j++) ok &= nextint(&q, &amount[j]);
+        if (!ok || p < 0 || p >= S.n || !S.active[p]) strcpy(msg, "Invalid process or release format");
+        else {
+            for (j = 0; j < S.m; j++)
+                if (amount[j] < 0 || amount[j] > S.alloc[p][j]) ok = 0;
+            if (!ok) strcpy(msg, "Cannot release a negative amount or more than the process holds");
+            else {
+                for (j = 0; j < S.m; j++) { S.alloc[p][j] -= amount[j]; S.avail[j] += amount[j]; }
+                strcpy(msg, "Resources released");
+            }
+        }
+        compute_need(&S); status_json(msg);
     } else if (!strcmp(path, "/api/safety")) {
         int seq[MAXP + 1]; compute_need(&S);
         if (is_safe(&S, seq)) {
