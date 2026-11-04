@@ -26,9 +26,16 @@ function matrixHTML(title,key,rows) {
   }
   return h+'</table>';
 }
+function needHTML() {
+  let h='<table><caption>Need (Max − Allocation)</caption><tr><th></th>';
+  for(let j=0;j<S.m;j++) h+='<th>R'+j+'</th>';
+  h+='</tr>';
+  for(let i=0;i<S.n;i++) { h+='<tr><th>P'+i+'</th>'; for(let j=0;j<S.m;j++) h+='<td>'+S.need[i][j]+'</td>'; h+='</tr>'; }
+  return h+'</table>';
+}
 function buildTables() {
-  $('tables').innerHTML=matrixHTML('Available','avail',1)+matrixHTML('Maximum Requirement','max',S.n)+matrixHTML('Allocation','allocation',S.n)+
-    '<p><strong>Need (Max − Allocation)</strong> is calculated by the backend.</p>'+matrixHTML('Need','need',S.n);
+  $('tables').innerHTML=matrixHTML('Available','avail',1)+matrixHTML('Maximum Requirement','max',S.n)+
+    matrixHTML('Allocation','allocation',S.n)+needHTML();
   $('tables').querySelectorAll('input').forEach(el=>el.addEventListener('change',updateSetup));
 }
 function readTable() {
