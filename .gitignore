@@ -1,0 +1,13 @@
+# Compiled programs
+Week 2/core
+Week 2/ui
+Week 2/logger
+Week 2/standalone
+
+# Log files and benchmark output
+Week 2/*.log
+Week 2/multi_output.txt
+Week 2/multi_run.out
+
+# Object files
+*.o
