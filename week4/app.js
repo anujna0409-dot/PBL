@@ -1,122 +1,104 @@
-/* ===== MEMBER 4: app.js  (UI logic; uses rag.js from Member 3) ===== */
+/* Frontend for the C deadlock-simulation API. */
 const $ = id => document.getElementById(id);
-let S = null, lastDead = [];
-
+let S = null;
 const ACTIONS = [
-  'Create system', 'Set Available', 'Set Max', 'Set Allocation',
-  'Show state', 'Safety check', 'Request resources', 'Release resources',
-  'Detect deadlock', 'Recover: terminate', 'Recover: preempt', 'Draw RAG / Reset'
+  'Create system', 'Edit Available / Max / Allocation', 'Show state',
+  'Safety check', 'Request resources', 'Release resources',
+  'Detect deadlock', 'Recover: terminate victim', 'Refresh / Reset'
 ];
+const log = message => { $('log').textContent += message + '\n'; $('log').scrollTop = $('log').scrollHeight; };
+const zeros = (r,c) => Array.from({length:r},()=>Array(c).fill(0));
 
-const zeros = (r, c) => Array.from({ length: r }, () => Array(c).fill(0));
-const need = (i, j) => S.max[i][j] - S.alloc[i][j];
-const log = t => { $('log').textContent += t + '\n'; $('log').scrollTop = 1e9; };
-
-function createSystem() {
-  const n = +$('n').value, m = +$('m').value;
-  S = { n, m, avail: Array(m).fill(0), max: zeros(n, m), alloc: zeros(n, m), req: zeros(n, m), active: Array(n).fill(true) };
-  lastDead = []; buildTables(); refresh(); log(`Created system: ${n} processes, ${m} resource types`);
+async function api(path, body='') {
+  const response = await fetch(path, {method: body === '' ? 'GET' : 'POST',
+    headers: body === '' ? {} : {'Content-Type':'text/plain'}, body: body || undefined});
+  if (!response.ok) throw new Error('Server returned HTTP '+response.status);
+  return response.json();
 }
-
-function matrixHTML(title, key, rows) {
-  let h = `<table><caption>${title}</caption><tr><th></th>${Array.from({ length: S.m }, (_, j) => `<th>R${j}</th>`).join('')}</tr>`;
-  for (let i = 0; i < rows; i++) {
-    h += `<tr><th>P${i}</th>` + Array.from({ length: S.m }, (_, j) =>
-      key === 'avail' ? `<td><input data-k="avail" data-j="${j}" type="number" min="0" value="${S.avail[j]}"></td>`
-                      : `<td><input data-k="${key}" data-i="${i}" data-j="${j}" type="number" min="0" value="${S[key][i][j]}"></td>`).join('') + '</tr>';
+function matrixHTML(title,key,rows) {
+  let h='<table><caption>'+title+'</caption><tr><th></th>';
+  for(let j=0;j<S.m;j++) h+='<th>R'+j+'</th>';
+  h+='</tr>';
+  for(let i=0;i<rows;i++) {
+    h+='<tr><th>P'+i+'</th>';
+    for(let j=0;j<S.m;j++) h+='<td><input data-k="'+key+'" data-i="'+i+'" data-j="'+j+'" type="number" min="0" value="'+(key==='avail'?S.available[j]:S[key][i][j])+'"></td>';
+    h+='</tr>';
   }
-  return h + '</table>';
+  return h+'</table>';
 }
-
 function buildTables() {
-  $('tables').innerHTML =
-    `<table><caption>Available</caption><tr>${S.avail.map((_, j) => `<th>R${j}</th>`).join('')}</tr><tr>${S.avail.map((v, j) => `<td><input data-k="avail" data-j="${j}" type="number" min="0" value="${v}"></td>`).join('')}</tr></table>` +
-    matrixHTML('Max', 'max', S.n) + matrixHTML('Allocation', 'alloc', S.n) + needHTML();
-  document.querySelectorAll('#tables input').forEach(el => el.onchange = readInputs);
+  $('tables').innerHTML=matrixHTML('Available','avail',1)+matrixHTML('Maximum Requirement','max',S.n)+matrixHTML('Allocation','allocation',S.n)+
+    '<p><strong>Need (Max − Allocation)</strong> is calculated by the backend.</p>'+matrixHTML('Need','need',S.n);
+  $('tables').querySelectorAll('input').forEach(el=>el.addEventListener('change',updateSetup));
 }
-function needHTML() {
-  let h = `<table><caption>Need (Max - Allocation)</caption><tr><th></th>${Array.from({ length: S.m }, (_, j) => `<th>R${j}</th>`).join('')}</tr>`;
-  for (let i = 0; i < S.n; i++) h += `<tr><th>P${i}</th>` + Array.from({ length: S.m }, (_, j) => `<td>${need(i, j)}</td>`).join('') + '</tr>';
-  return h + '</table>';
-}
-
-function readInputs() {
-  document.querySelectorAll('#tables input').forEach(el => {
-    const v = Math.max(0, +el.value || 0), k = el.dataset.k, j = +el.dataset.j;
-    if (k === 'avail') S.avail[j] = v; else S[k][+el.dataset.i][j] = v;
+function readTable() {
+  const available=Array(S.m).fill(0), max=zeros(S.n,S.m), allocation=zeros(S.n,S.m);
+  $('tables').querySelectorAll('input').forEach(el=>{
+    const v=Number(el.value), i=Number(el.dataset.i), j=Number(el.dataset.j), k=el.dataset.k;
+    if(!Number.isInteger(v)||v<0) throw new Error('Enter non-negative whole numbers only.');
+    if(k==='avail') available[j]=v;
+    else if(k==='max') max[i][j]=v;
+    else if(k==='allocation') allocation[i][j]=v;
   });
-  refresh(false);
+  return {available,max,allocation};
 }
-
-/* ---- Banker's safety algorithm ---- */
-function safety() {
-  const work = [...S.avail], fin = S.active.map(a => !a), seq = [];
-  let progress = true;
-  while (progress) {
-    progress = false;
-    for (let i = 0; i < S.n; i++) {
-      if (fin[i]) continue;
-      if (S.alloc[i].every((_, j) => need(i, j) <= work[j])) {
-        S.alloc[i].forEach((a, j) => work[j] += a);
-        fin[i] = true; seq.push(i); progress = true;
-      }
+async function setupFromTables() {
+  const d=readTable();
+  for(let i=0;i<S.n;i++) for(let j=0;j<S.m;j++) if(d.allocation[i][j]>d.max[i][j]) throw new Error('Allocation cannot exceed Maximum for P'+i+', R'+j+'.');
+  const nums=[S.n,S.m,...d.available,...d.allocation.flat(),...d.max.flat()];
+  return api('/api/setup',nums.join(' '));
+}
+async function updateSetup() {
+  try { const data=await setupFromTables(); render(data); log(data.message); }
+  catch(e) { log('Input error: '+e.message); }
+}
+function render(data) {
+  if(data.n>0) {
+    S={n:data.n,m:data.m,available:data.available,allocation:data.allocation,max:data.max,need:data.need};
+    buildTables();
+  }
+  const state=(data.state||'NOT_SET').toLowerCase();
+  $('badge').textContent=(data.state||'NOT_SET'); $('badge').className='badge '+state;
+  $('seq').textContent='Safe sequence: '+(data.safeSequence?.length?data.safeSequence.map(p=>'P'+p).join(' → '):data.state==='SAFE'?'(none needed)':'none');
+  const pct=Math.round(data.utilization?.overall||0);
+  $('utilFill').style.width=pct+'%'; $('utilText').textContent=pct+'%';
+  if(typeof drawRAG==='function' && S) {
+    const dead=data.deadlocked||[];
+    const graphState={n:S.n,m:S.m,avail:data.available,max:data.max,alloc:data.allocation,req:data.requests,
+      active:(data.active||[]).map(Boolean)};
+    drawRAG($('rag'),graphState,dead);
+  }
+}
+async function run(path,body='') {
+  try { const data=await api(path,body); render(data); log(data.message||'Completed'); }
+  catch(e) { log('Error: '+e.message+' — start the C server and open this page through http://localhost:8080'); }
+}
+function parseAmounts() {
+  if(!S) throw new Error('Create the system first.');
+  const a=$('amt').value.trim().split(/\s+/).map(Number);
+  if(a.length!==S.m||a.some(x=>!Number.isInteger(x)||x<0)) throw new Error('Enter exactly '+S.m+' non-negative whole numbers.');
+  return a;
+}
+async function act(k) {
+  try {
+    if(k===0) {
+      const n=Number($('n').value),m=Number($('m').value);
+      if(!Number.isInteger(n)||!Number.isInteger(m)||n<1||n>10||m<1||m>10) throw new Error('Processes and resources must be between 1 and 10.');
+      S={n,m,available:Array(m).fill(0),max:zeros(n,m),allocation:zeros(n,m)};
+      buildTables(); const d=await setupFromTables(); render(d); log(d.message); return;
     }
-  }
-  return fin.every(Boolean) ? seq : null;
+    if(!S) throw new Error('Create a system first.');
+    if(k===1) { log('Edit table cells; each valid change is saved to the C backend.'); return; }
+    if(k===2) return run('/api/status');
+    if(k===3) return run('/api/safety');
+    if(k===6) return run('/api/detect');
+    if(k===7) return run('/api/recover');
+    if(k===8) { if(confirm('Reset the system?')) { S=null; $('tables').innerHTML=''; $('badge').textContent='NOT CREATED'; $('badge').className='badge'; $('seq').textContent='Safe sequence: none'; log('System reset.'); } else return run('/api/status'); return; }
+    const p=Number($('pid').value),a=parseAmounts();
+    if(!Number.isInteger(p)||p<0||p>=S.n) throw new Error('Enter a valid process ID.');
+    if(k===4) return run('/api/request',[p,...a].join(' '));
+    if(k===5) return run('/api/release',[p,...a].join(' '));
+  } catch(e) { log('Input error: '+e.message); }
 }
-
-function request(p, amt) {
-  if (amt.some((a, j) => a > need(p, j))) return log(`P${p}: request exceeds its maximum claim`);
-  if (amt.some((a, j) => a > S.avail[j])) {
-    amt.forEach((a, j) => S.req[p][j] = a);
-    log(`P${p}: not enough available, request is now pending (edge added to RAG)`);
-  } else {
-    amt.forEach((a, j) => { S.avail[j] -= a; S.alloc[p][j] += a; });
-    if (safety()) { log(`P${p}: request granted (state stays safe)`); }
-    else { amt.forEach((a, j) => { S.avail[j] += a; S.alloc[p][j] -= a; S.req[p][j] = a; }); log(`P${p}: request denied, would be unsafe (made pending)`); }
-  }
-}
-
-function release(p, amt) {
-  if (amt.some((a, j) => a > S.alloc[p][j])) return log(`P${p}: cannot release more than it holds`);
-  amt.forEach((a, j) => { S.avail[j] += a; S.alloc[p][j] -= a; });
-  log(`P${p}: released resources`);
-}
-
-const parseAmt = () => { const a = $('amt').value.trim().split(/\s+/).map(Number); return a.length === S.m && a.every(x => x >= 0) ? a : null; };
-
-function act(k) {
-  if (!S && k !== 0) return log('Create a system first.');
-  const p = +$('pid').value;
-  switch (k) {
-    case 0: createSystem(); return;
-    case 1: case 2: case 3: log('Edit the table cells directly; values update on change.'); return;
-    case 4: log(`Available: [${S.avail}]\nAlloc: ${JSON.stringify(S.alloc)}\nMax: ${JSON.stringify(S.max)}`); break;
-    case 5: { const s = safety(); log(s ? 'SAFE. Sequence: ' + s.map(x => 'P' + x).join(' -> ') : 'UNSAFE: no safe sequence'); break; }
-    case 6: case 7: { const a = parseAmt(); if (p >= S.n || !a) return log(`Enter a valid process and ${S.m} amounts.`); (k === 6 ? request : release)(p, a); break; }
-    case 8: lastDead = detectDeadlock(S); log(lastDead.length ? 'DEADLOCK among: ' + lastDead.map(x => 'P' + x) : 'No deadlock'); break;
-    case 9: { const killed = recoverTerminate(S); lastDead = []; log(killed.length ? 'Terminated: ' + killed.map(x => 'P' + x) : 'Nothing to recover'); break; }
-    case 10: { if (p >= S.n) return log('Invalid process'); log(recoverPreempt(S, p) ? `Preempted resources of P${p}` : `P${p} is not active`); lastDead = detectDeadlock(S); break; }
-    case 11: if (confirm('Reset system? (Cancel just redraws the RAG)')) { createSystem(); return; } break;
-  }
-  buildTables(); refresh();
-}
-
-function refresh(rebuild = true) {
-  if (!S) return;
-  const dead = detectDeadlock(S), seq = safety();
-  lastDead = dead;
-  const state = dead.length ? 'deadlocked' : seq ? 'safe' : 'unsafe';
-  $('badge').textContent = state.toUpperCase(); $('badge').className = 'badge ' + state;
-  $('seq').textContent = 'Safe sequence: ' + (seq && seq.length ? seq.map(x => 'P' + x).join(' -> ') : seq ? '(none needed)' : 'none');
-  const total = S.avail.map((a, j) => a + S.alloc.reduce((s, r) => s + r[j], 0));
-  const used = S.alloc.flat().reduce((a, b) => a + b, 0), cap = total.reduce((a, b) => a + b, 0);
-  const pct = cap ? Math.round(used / cap * 100) : 0;
-  $('utilFill').style.width = pct + '%'; $('utilText').textContent = pct + '%';
-  drawRAG($('rag'), S, dead);
-}
-
-ACTIONS.forEach((name, k) => {
-  const b = document.createElement('button'); b.textContent = `${k + 1}. ${name}`; b.onclick = () => act(k); $('menu').appendChild(b);
-});
-createSystem();
+ACTIONS.forEach((name,k)=>{const b=document.createElement('button');b.textContent=(k+1)+'. '+name;b.onclick=()=>act(k);$('menu').appendChild(b);});
+run('/api/status');
