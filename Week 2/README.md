@@ -254,3 +254,17 @@ The standalone elapsed time is very short and is rounded to 0.01 seconds. Theref
 The multi-process timing includes process startup and shutdown, not just IPC execution time. The maximum RSS reported for the multi-process benchmark is not the combined peak memory usage of all three processes.
 
 The standalone implementation is a simplified baseline and is not a fully identical implementation of the multi-process simulator. Therefore, these measurements are preliminary and should not be treated as a perfectly controlled comparison.
+
+
+## Team Contributions
+
+The project was divided into separate modules to support independent development and integration.
+
+| Team Member | Role | Responsibilities |
+|---|---|---|
+| [Member 1 Name] | UI Process | User interaction, command input, command parsing, and displaying simulator results. |
+| [Member 2 Name] | Core Process | CPU instruction execution and management of Memory, Stack, and Instruction Queue. |
+| [Member 3 Name] | Logging Process | Receiving log messages, recording timestamps, and maintaining the simulator log file. |
+| [Team Leader Name] | Integration and Testing | Integrating the UI, Core, and Logger processes; resolving IPC and interface issues; and coordinating system testing and benchmarking. |
+
+Each team member contributed to the development of the assigned component. The components were integrated to form the complete multi-process CPU simulator.
