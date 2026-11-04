@@ -1,0 +1,373 @@
+/* =====================================================================
+ * logger.c  -  Logger process for the Week 4 CPU Simulator PBL project
+ *
+ * Architecture:
+ *   UI Process --(mqueue)--> Core Process --(mqueue)--> Logger (this file)
+ *
+ * What this process does:
+ *   1. Opens the Core->Logger POSIX message queue (name from ipc_common.h)
+ *   2. Waits for Message structs sent by Core
+ *   3. Adds a timestamp to each one
+ *   4. Writes it to simulator.log (and echoes it to the terminal)
+ *   5. Stops when it sees a termination message (or Ctrl+C)
+ *   6. Closes the queue, closes the log file, unlinks the queue
+ *
+ * Compile:  gcc -Wall -Wextra -o logger logger.c -lrt
+ * Run:      started by Core automatically (./logger --pipe, via pipe + fork)
+ *           or alone: ./logger  (old message-queue mode)
+ * ===================================================================== */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>     /* getpid                       */
+#include <fcntl.h>      /* O_RDONLY, O_CREAT            */
+#include <sys/stat.h>   /* mode constants for mq_open   */
+#include <mqueue.h>     /* mq_open, mq_receive, ...     */
+#include <sys/types.h>  /* ssize_t                      */
+
+#include "ipc_common.h" /* queue names, Message, MessageType (NOT modified) */
+
+#define LOG_FILE_NAME "simulator.log"
+
+/* When this becomes 0, the main loop stops.
+ * volatile sig_atomic_t is the safe type to change inside a signal handler. */
+static volatile sig_atomic_t keep_running = 1;
+
+
+/* ---------------------------------------------------------------------
+ * Signal handler: runs when the user presses Ctrl+C (SIGINT) or the
+ * process gets SIGTERM. We only set a flag; the main loop does the
+ * real cleanup. (Doing printf/file work inside a handler is unsafe.)
+ * --------------------------------------------------------------------- */
+static void handle_signal(int sig)
+{
+    (void)sig;          /* unused parameter, silences a compiler warning */
+    keep_running = 0;
+}
+
+
+/* ---------------------------------------------------------------------
+ * Build a timestamp string like "2026-10-06 13:30:05" in 'buf'.
+ * --------------------------------------------------------------------- */
+static void get_timestamp(char *buf, size_t size)
+{
+    time_t now = time(NULL);
+    struct tm tm_info;
+
+    localtime_r(&now, &tm_info);   /* thread-safe version of localtime */
+    strftime(buf, size, "%Y-%m-%d %H:%M:%S", &tm_info);
+}
+
+
+/* ---------------------------------------------------------------------
+ * Turn a MessageType into a readable label for the log file.
+ * --------------------------------------------------------------------- */
+static const char *type_to_string(MessageType type)
+{
+    switch (type) {
+        case LOG_EXECUTION: return "EXECUTION";
+        case LOG_ERROR:     return "ERROR";
+        case LOG_SYSTEM:    return "SYSTEM";
+        case CMD_EXIT:      return "EXIT";
+        default:            return "UNKNOWN";
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+ * Decide whether a message means "Logger, please shut down".
+ *
+ * ipc_common.h has no dedicated "LOG_TERMINATE" type, so we accept:
+ *   (a) type == CMD_EXIT                          (Core forwards the exit)
+ *   (b) type == LOG_SYSTEM and data contains
+ *       "EXIT", "TERMINATE" or "SHUTDOWN"         (Core sends a system log)
+ *
+ * TEAM NOTE: agree with whoever writes Core which of these they will send.
+ * --------------------------------------------------------------------- */
+static int is_termination_message(const Message *msg)
+{
+    if (msg->type == CMD_EXIT) {
+        return 1;
+    }
+    if (msg->type == LOG_SYSTEM) {
+        if (strstr(msg->data, "EXIT")      != NULL ||
+            strstr(msg->data, "TERMINATE") != NULL ||
+            strstr(msg->data, "SHUTDOWN")  != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+/* ---------------------------------------------------------------------
+ * Write one message to the log file and echo it on the terminal.
+ * Format:  [timestamp] [TYPE] value=.. address=.. | text
+ * --------------------------------------------------------------------- */
+static void write_log_entry(FILE *log_file, const Message *msg)
+{
+    char timestamp[32];
+    get_timestamp(timestamp, sizeof(timestamp));
+
+    fprintf(log_file, "[%s] [%s] value=%d address=%d | %s\n",
+            timestamp, type_to_string(msg->type),
+            msg->value, msg->address, msg->data);
+
+    /* fflush forces the text onto disk now, so nothing is lost
+     * if the program crashes or is killed right after. */
+    fflush(log_file);
+
+    printf("[%s] [%s] value=%d address=%d | %s\n",
+           timestamp, type_to_string(msg->type),
+           msg->value, msg->address, msg->data);
+}
+
+
+/* ---------------------------------------------------------------------
+ * Write a line generated by the Logger itself (startup / shutdown).
+ * --------------------------------------------------------------------- */
+static void write_logger_note(FILE *log_file, const char *text)
+{
+    char timestamp[32];
+    get_timestamp(timestamp, sizeof(timestamp));
+
+    fprintf(log_file, "[%s] [LOGGER] %s\n", timestamp, text);
+    fflush(log_file);
+    printf("[%s] [LOGGER] %s\n", timestamp, text);
+}
+
+
+/* ---------------------------------------------------------------------
+ * PIPE MODE (used when Core starts the Logger with fork + exec).
+ * Core connects the read end of a pipe to this process's stdin (fd 0).
+ * We read whole Message structs from it until Core closes the pipe
+ * (end-of-file) or a signal comes.
+ *
+ * read() can return fewer bytes than asked, so we keep reading
+ * until we have a full Message.
+ * Returns 1 = got a full message, 0 = end of file, -1 = error/signal.
+ * --------------------------------------------------------------------- */
+static int read_full_message(int fd, Message *msg)
+{
+    size_t got = 0;
+    char *p = (char *)msg;
+
+    while (got < sizeof(Message)) {
+        ssize_t n = read(fd, p + got, sizeof(Message) - got);
+        if (n == 0) {
+            return 0;                       /* pipe closed by Core */
+        }
+        if (n < 0) {
+            if (errno == EINTR && keep_running) {
+                continue;
+            }
+            return -1;
+        }
+        got += (size_t)n;
+    }
+    return 1;
+}
+
+static int run_pipe_mode(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT,  &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+
+    FILE *log_file = fopen(LOG_FILE_NAME, "a");
+    if (log_file == NULL) {
+        perror("Logger: cannot open " LOG_FILE_NAME);
+        return EXIT_FAILURE;
+    }
+
+    printf("=== Logger process started (PID %d) ===\n", (int)getpid());
+    printf("Reading from       : pipe (stdin) from Core\n");
+    printf("Writing to file    : %s\n\n", LOG_FILE_NAME);
+    write_logger_note(log_file, "Logger started, waiting for messages (pipe).");
+
+    int messages_logged = 0;
+
+    while (keep_running) {
+        Message msg;
+        int r = read_full_message(STDIN_FILENO, &msg);
+
+        if (r == 0) {
+            write_logger_note(log_file, "Pipe closed by Core.");
+            break;
+        }
+        if (r < 0) {
+            break;                          /* signal or read error */
+        }
+
+        msg.data[MAX_DATA - 1] = '\0';
+        write_log_entry(log_file, &msg);
+        messages_logged++;
+
+        /* In pipe mode we do NOT stop on the EXIT message: Core may
+         * still send its last log lines. The pipe closing (EOF) is
+         * the stop signal. */
+    }
+
+    if (!keep_running) {
+        write_logger_note(log_file, "Stopped by signal (Ctrl+C / SIGTERM).");
+    }
+
+    char summary[64];
+    snprintf(summary, sizeof(summary),
+             "Logger shutting down. Messages logged: %d", messages_logged);
+    write_logger_note(log_file, summary);
+
+    fclose(log_file);
+    printf("=== Logger process terminated ===\n");
+    return EXIT_SUCCESS;
+}
+
+
+int main(int argc, char *argv[])
+{
+    /* "--pipe" = started by Core through pipe + fork.
+     * No argument = old standalone mode with the POSIX message queue. */
+    if (argc > 1 && strcmp(argv[1], "--pipe") == 0) {
+        return run_pipe_mode();
+    }
+
+    /* ---------- 1. Set up signal handling ----------
+     * We use sigaction WITHOUT SA_RESTART so that a blocked mq_receive()
+     * is interrupted by Ctrl+C and returns -1 with errno == EINTR.
+     * That lets the loop notice keep_running == 0 and exit cleanly. */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT,  &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+
+    /* ---------- 2. Open the log file ----------
+     * "a" = append, so old logs are kept between runs. */
+    FILE *log_file = fopen(LOG_FILE_NAME, "a");
+    if (log_file == NULL) {
+        perror("Logger: cannot open " LOG_FILE_NAME);
+        return EXIT_FAILURE;
+    }
+
+    /* ---------- 3. Open (or create) the message queue ----------
+     * O_CREAT lets the Logger start before or after Core: whoever runs
+     * first creates the queue, the other one just opens it. If the queue
+     * already exists, these attributes are ignored and the existing ones
+     * are used. */
+    struct mq_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.mq_flags   = 0;                  /* blocking mode               */
+    attr.mq_maxmsg  = 10;                 /* max messages waiting        */
+    attr.mq_msgsize = sizeof(Message);    /* size of ONE message         */
+    attr.mq_curmsgs = 0;
+
+    mqd_t mq = mq_open(CORE_TO_LOGGER_QUEUE, O_RDONLY | O_CREAT, 0666, &attr);
+    if (mq == (mqd_t)-1) {
+        perror("Logger: mq_open failed");
+        fclose(log_file);
+        return EXIT_FAILURE;
+    }
+
+    /* ---------- 4. Check the queue's real message size ----------
+     * mq_receive() needs a buffer at least as big as the queue's
+     * mq_msgsize. If Core created the queue with a different size,
+     * we read the real value and size our buffer to fit. */
+    struct mq_attr real_attr;
+    if (mq_getattr(mq, &real_attr) == -1) {
+        perror("Logger: mq_getattr failed");
+        mq_close(mq);
+        fclose(log_file);
+        return EXIT_FAILURE;
+    }
+    if ((size_t)real_attr.mq_msgsize < sizeof(Message)) {
+        fprintf(stderr,
+                "Logger: queue message size (%ld) is smaller than Message (%zu).\n"
+                "        Delete the old queue (rm /dev/mqueue%s) and retry.\n",
+                (long)real_attr.mq_msgsize, sizeof(Message), CORE_TO_LOGGER_QUEUE);
+        mq_close(mq);
+        fclose(log_file);
+        return EXIT_FAILURE;
+    }
+
+    char *buffer = malloc((size_t)real_attr.mq_msgsize);
+    if (buffer == NULL) {
+        perror("Logger: malloc failed");
+        mq_close(mq);
+        fclose(log_file);
+        return EXIT_FAILURE;
+    }
+
+    /* ---------- 5. Startup information ---------- */
+    printf("=== Logger process started (PID %d) ===\n", (int)getpid());
+    printf("Listening on queue : %s\n", CORE_TO_LOGGER_QUEUE);
+    printf("Writing to file    : %s\n", LOG_FILE_NAME);
+    printf("Press Ctrl+C to stop.\n\n");
+    write_logger_note(log_file, "Logger started, waiting for messages.");
+
+    /* ---------- 6. Main receive loop ---------- */
+    int messages_logged = 0;
+
+    while (keep_running) {
+        /* Blocks here until Core sends something. */
+        ssize_t bytes = mq_receive(mq, buffer, (size_t)real_attr.mq_msgsize, NULL);
+
+        if (bytes == -1) {
+            if (errno == EINTR) {
+                continue;   /* interrupted by a signal; loop re-checks flag */
+            }
+            perror("Logger: mq_receive failed");
+            write_logger_note(log_file, "mq_receive error, stopping.");
+            break;
+        }
+
+        if ((size_t)bytes < sizeof(Message)) {
+            write_logger_note(log_file, "Ignored a message that was too short.");
+            continue;
+        }
+
+        /* Copy the raw bytes into a proper Message struct. */
+        Message msg;
+        memcpy(&msg, buffer, sizeof(Message));
+
+        /* Make sure the text is always terminated, even if Core forgot. */
+        msg.data[MAX_DATA - 1] = '\0';
+
+        write_log_entry(log_file, &msg);
+        messages_logged++;
+
+        /* Termination message? Leave the loop. */
+        if (is_termination_message(&msg)) {
+            write_logger_note(log_file, "Termination message received.");
+            break;
+        }
+    }
+
+    if (!keep_running) {
+        write_logger_note(log_file, "Stopped by signal (Ctrl+C / SIGTERM).");
+    }
+
+    /* ---------- 7. Cleanup ---------- */
+    char summary[64];
+    snprintf(summary, sizeof(summary),
+             "Logger shutting down. Messages logged: %d", messages_logged);
+    write_logger_note(log_file, summary);
+
+    free(buffer);
+    mq_close(mq);                        /* close MY handle to the queue */
+    mq_unlink(CORE_TO_LOGGER_QUEUE);     /* remove the queue name from the system.
+                                          * The Logger is the only reader, so it is
+                                          * the right process to clean this up.
+                                          * Core must NOT unlink this queue. */
+    fclose(log_file);
+
+    printf("=== Logger process terminated ===\n");
+    return EXIT_SUCCESS;
+}// Logger process
