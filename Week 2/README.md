@@ -202,23 +202,44 @@ PC = 2
 
 
 
-## Preliminary Benchmark Results
+## Benchmark Results (5 Runs)
 
-The standalone and multi-process simulators were tested using the same input workload:
+Both the standalone and multi-process simulators were tested five times using the same input workload:
 - 100 `LOAD 10` commands
 - 100 `ADD 5` commands
 - 100 `SUB 2` commands
 - 1 `EXIT` command
 
-### Measurements
+### Individual Measurements
+
+**Standalone Simulator**
+
+| Run | Elapsed (s) | User (s) | System (s) | Max RSS (KB) |
+|---|---:|---:|---:|---:|
+| 1 | 0.01 | 0.00 | 0.00 | 1976 |
+| 2 | 0.01 | 0.00 | 0.00 | 1912 |
+| 3 | 0.01 | 0.00 | 0.00 | 2040 |
+| 4 | 0.01 | 0.00 | 0.00 | 2040 |
+| 5 | 0.01 | 0.00 | 0.00 | 1912 |
+
+**Multi-process Simulator**
+
+| Run | Elapsed (s) | User (s) | System (s) | Max RSS (KB) |
+|---|---:|---:|---:|---:|
+| 1 | 1.02 | 0.03 | 0.21 | 4136 |
+| 2 | 0.92 | 0.01 | 0.21 | 4280 |
+| 3 | 1.11 | 0.05 | 0.21 | 4156 |
+| 4 | 1.00 | 0.02 | 0.22 | 4240 |
+| 5 | 1.20 | 0.03 | 0.22 | 4152 |
+
+### Average Measurements
 
 | Metric | Standalone | Multi-process |
 |---|---:|---:|
-| User time | 0.00 s | 0.03 s |
-| System time | 0.01 s | 0.20 s |
-| Elapsed time | 0.02 s | 1.99 s |
-| CPU usage | 44% | 12% |
-| Maximum RSS | 1912 KB | 7724 KB |
+| Elapsed time | 0.01 s | 1.05 s |
+| User time | 0.00 s | 0.028 s |
+| System time | 0.00 s | 0.214 s |
+| Maximum RSS | 1976 KB | 4192.8 KB |
 
 ### Logger Verification
 
@@ -226,6 +247,10 @@ The multi-process test completed successfully. The Core process accepted the UI 
 
 ### Performance Analysis and Limitations
 
-These are preliminary measurements from one run. The multi-process measurement includes a deliberate one-second startup delay, so the elapsed times are not a direct measurement of IPC overhead.
+The multi-process implementation has additional process startup, communication, synchronization, and shutdown overhead.
 
-The reported maximum RSS for the multi-process run is not the combined memory usage of all three processes. Further repeated tests and per-process memory measurements are needed for a fair comparison.
+The standalone elapsed time is very short and is rounded to 0.01 seconds. Therefore, small timing differences cannot be measured reliably with this workload.
+
+The multi-process timing includes process startup and shutdown, not just IPC execution time. The maximum RSS reported for the multi-process benchmark is not the combined peak memory usage of all three processes.
+
+The standalone implementation is a simplified baseline and is not a fully identical implementation of the multi-process simulator. Therefore, these measurements are preliminary and should not be treated as a perfectly controlled comparison.
