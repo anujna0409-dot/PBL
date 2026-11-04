@@ -1,11 +1,11 @@
-# CPU Simulator – IPC Techniques (Week 2)
+–# CPU Simulator – IPC Techniques (Week 2)
 
 ## Project overview
 
 This project implements a simple CPU simulator using three independent processes:
 
 1. **UI Process** – accepts user commands and displays simulator information.
-2. **Core Process** – executes CPU operations and manages Memory, Stack, and the Instruction Queue.
+2––––. **Core Process** – executes CPU operations and manages Memory, Stack, and the Instruction Queue.
 3. **Logger Process** – receives log messages from Core and writes them to `simulator.log`.
 
 The processes communicate using Inter-Process Communication (IPC) mechanisms provided by POSIX/Linux. The three source files `ui.c`, `core.c`, and `logger.c` each contain their own `main()` function and are compiled as separate executables.
@@ -199,3 +199,33 @@ PC = 2
 | TC06 | Push and pop stack values | Stack operations work correctly |
 | TC07 | Send log messages through pipe | Logger records messages in simulator.log |
 | TC08 | Enter EXIT in UI | Core and Logger shut down normally |
+
+
+
+## Preliminary Benchmark Results
+
+The standalone and multi-process simulators were tested using the same input workload:
+- 100 `LOAD 10` commands
+- 100 `ADD 5` commands
+- 100 `SUB 2` commands
+- 1 `EXIT` command
+
+### Measurements
+
+| Metric | Standalone | Multi-process |
+|---|---:|---:|
+| User time | 0.00 s | 0.03 s |
+| System time | 0.01 s | 0.20 s |
+| Elapsed time | 0.02 s | 1.99 s |
+| CPU usage | 44% | 12% |
+| Maximum RSS | 1912 KB | 7724 KB |
+
+### Logger Verification
+
+The multi-process test completed successfully. The Core process accepted the UI connection, processed the workload, and shut down normally. The Logger recorded 303 messages and terminated after the pipe was closed.
+
+### Performance Analysis and Limitations
+
+These are preliminary measurements from one run. The multi-process measurement includes a deliberate one-second startup delay, so the elapsed times are not a direct measurement of IPC overhead.
+
+The reported maximum RSS for the multi-process run is not the combined memory usage of all three processes. Further repeated tests and per-process memory measurements are needed for a fair comparison.
