@@ -185,3 +185,17 @@ PC = 2
 - Do not compile all `.c` files into one executable: `core.c`, `ui.c`, and `logger.c` each contain their own `main()` function and must be built as separate processes.
 - Core removes its named shared-memory and semaphore objects during normal shutdown.
 - The current implementation uses a synchronous command-response flow; this README does not claim that separate worker threads are used.
+
+
+## IPC Test Cases
+
+| Test ID | Test Description | Expected Result |
+|---|---|---|
+| TC01 | Compile using make | All three programs compile successfully |
+| TC02 | Send LOAD command from UI | Core receives the command |
+| TC03 | Execute LOAD 10 and ADD 5 | ACC = 15 |
+| TC04 | Read simulator state | UI displays updated shared memory state |
+| TC05 | Store and load memory | Memory operations work correctly |
+| TC06 | Push and pop stack values | Stack operations work correctly |
+| TC07 | Send log messages through pipe | Logger records messages in simulator.log |
+| TC08 | Enter EXIT in UI | Core and Logger shut down normally |
