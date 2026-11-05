@@ -3,10 +3,10 @@
 
 #include "common.h"
 
-/* Detect deadlocked processes */
+/* Returns the number of deadlocked processes and stores their IDs in dead[]. */
 int detect_deadlock(State *s, int dead[]);
 
-/* Recover from deadlock */
+/* Terminates one deadlocked process, releases its resources and retries waiting requests. */
 int recover_one(State *s, char *msg);
 
 #endif
