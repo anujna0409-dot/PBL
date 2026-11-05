@@ -91,7 +91,7 @@ async function act(k) {
     if(k===0) {
       const n=Number($('n').value),m=Number($('m').value);
       if(!Number.isInteger(n)||!Number.isInteger(m)||n<1||n>10||m<1||m>10) throw new Error('Processes and resources must be between 1 and 10.');
-      S={n,m,available:Array(m).fill(0),max:zeros(n,m),allocation:zeros(n,m)};
+      S={n,m,available:Array(m).fill(0),max:zeros(n,m),allocation:zeros(n,m),need:zeros(n,m)};
       buildTables(); const d=await setupFromTables(); render(d); log(d.message); return;
     }
     if(!S) throw new Error('Create a system first.');
