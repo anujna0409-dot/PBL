@@ -146,7 +146,7 @@ static void respond(sock_t c, int code, const char *type, const char *body, int 
 static void serve_file(sock_t c, const char *path) {
     char fn[300];
     if (strstr(path, "..")) { respond(c, 403, "text/plain", "Forbidden", 9); return; }
-    snprintf(fn, sizeof fn, "frontend%s%s", path, strcmp(path, "/") ? "" : "index.html");
+    snprintf(fn, sizeof fn, "%s%s", path[0] == '/' ? path + 1 : path, strcmp(path, "/") ? "" : "index.html");
     FILE *f = fopen(fn, "rb");
     if (!f) { respond(c, 404, "text/plain", "Not found", 9); return; }
     fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
